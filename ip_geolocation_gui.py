@@ -4,6 +4,8 @@ from tkinter import filedialog, messagebox
 import requests
 from openpyxl import load_workbook, Workbook
 import csv
+import concurrent.futures
+import time
 
 def load_ips(file_path, column, start_row):
     ips = []
@@ -66,7 +68,11 @@ def write_to_excel(data, output_file):
 def process_file(file_path, column, start_row, api_key):
     try:
         ips = load_ips(file_path, column, start_row)
-        geolocation_data = [get_geolocation(ip, api_key) for ip in ips]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+            futures = [executor.submit(get_geolocation, ip, api_key) for ip in ips]
+            geolocation_data = [future.result() for future in concurrent.futures.as_completed(futures)]
+
         output_dir = "Output"
         output_file = os.path.join(output_dir, 'ip_geolocation.xlsx')
         write_to_excel(geolocation_data, output_file)
@@ -80,6 +86,14 @@ def browse_file():
         file_path_entry.delete(0, tk.END)
         file_path_entry.insert(0, file_path)
 
+def on_process():
+    file_path = file_path_entry.get().strip()
+    column = column_entry.get().strip()
+    start_row = int(start_row_entry.get().strip())
+    api_key = api_key_entry.get().strip()
+    process_file(file_path, column, start_row, api_key)
+
+# Create the GUI application
 app = tk.Tk()
 app.title("IP Geolocation Processor")
 
@@ -99,13 +113,6 @@ start_row_entry.grid(row=2, column=1, padx=10, pady=5)
 tk.Label(app, text="API Key:").grid(row=3, column=0, padx=10, pady=5)
 api_key_entry = tk.Entry(app, width=50)
 api_key_entry.grid(row=3, column=1, padx=10, pady=5)
-
-def on_process():
-    file_path = file_path_entry.get().strip()
-    column = column_entry.get().strip()
-    start_row = int(start_row_entry.get().strip())
-    api_key = api_key_entry.get().strip()
-    process_file(file_path, column, start_row, api_key)
 
 tk.Button(app, text="Process", command=on_process).grid(row=4, column=1, padx=10, pady=20)
 
